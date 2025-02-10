@@ -74,3 +74,36 @@ def process_thumbnails(file_path, document_id):
         pass
 
     db.session.commit()  # Commit all thumbnail records to the database
+
+def search_by_keyword(keyword):
+    documents = Document.query.all()
+    search_results = []
+    
+    for document in documents:
+        pages = []
+        
+        for page_number, page_text in enumerate(document.text, start=1):
+            seen_positions = set()
+            lines = []
+            
+            for i in range(len(page_text)):
+                if keyword in page_text[i:i+len(keyword)] and i not in seen_positions:
+                    start = max(0, i - 5)
+                    end = min(len(page_text), i + 20)
+                    snippet = page_text[start:end]
+                    
+                    if not any(snippet in existing for existing in lines):
+                        lines.append(snippet)
+                        seen_positions.update(range(i, i + len(keyword)))
+            
+            if lines:
+                pages.append({"page_number": page_number, "lines": lines})
+        
+        if pages:
+            search_results.append({
+                "id": document.id,
+                "document_title": document.title,
+                "pages": pages
+            })
+    
+    return search_results

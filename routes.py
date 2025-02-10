@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from models import db, Document
 # from ocr import perform_ocr  # Import OCR functionality
 from utils import *
@@ -39,12 +39,24 @@ def get_documents():
     documents = Document.query.all()
     return jsonify([{"id": doc.id, "title": doc.title, "type": doc.type, "thumbnail_url": f"/thumbnail/{doc.title}/1.jpg"} for doc in documents])
 
-@main_routes.route('/doc-edit', methods=['GET'])
-def get_document_for_editing():
+@main_routes.route('/doc-detail', methods=['GET'])
+def view_document():
     doc_id = request.args.get('id')
     document = Document.query.get(doc_id)
     if document:
         return jsonify({"id": document.id, "title": document.title, "type": document.type, "text": document.text})
+    return jsonify({"error": "Document not found"}), 404
+
+@main_routes.route('/doc-edit', methods=['POST'])
+def edit_document():
+    data = request.json
+    doc_id = data['id']
+    text = data['text']
+    document = Document.query.get(doc_id)
+    if document:
+        document.text = text
+        db.session.commit()
+        return jsonify({"status": True, "message": "Document edited successfully"})
     return jsonify({"error": "Document not found"}), 404
 
 @main_routes.route('/doc-save', methods=['PUT'])
@@ -72,4 +84,5 @@ def delete_document():
 def search_documents():
     keyword = request.args.get('keyword')
     # Logic to search documents by keyword
-    return jsonify([])  # Return search results
+    results = search_by_keyword(keyword)
+    return jsonify(results)  # Return search results
