@@ -6,6 +6,8 @@ from PIL import Image
 import pytesseract  # Ensure you have Tesseract installed and configured
 import fitz  # PyMuPDF for PDF handling
 
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
 # Define the storage path
 STORAGE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'storage')
 
@@ -38,19 +40,19 @@ def read_from_file(file_path):
 def OCR_from_file(file_path):
     """Perform OCR on the document file to extract text."""
     # Use Tesseract to perform OCR on the document
-    text = ""
+    text_pages = []
     # Convert the document to images first if it's not already an image
     if file_path.endswith('.pdf'):
         from pdf2image import convert_from_path
-        images = convert_from_path(file_path)
+        POPPLER_PATH = r"C:\poppler-24.08.0\Library\bin"
+        images = convert_from_path(file_path, dpi=200, poppler_path=POPPLER_PATH)
         for image in images:
-            text += pytesseract.image_to_string(image) + "\n"
+            text_pages.append(pytesseract.image_to_string(image, lang='jpn_vert+chi_tra_vert'))
     else:
         # If it's an image file, directly apply OCR
         image = Image.open(file_path)
-        text = pytesseract.image_to_string(image)
-    return text.strip()
-
+        text_pages.append(pytesseract.image_to_string(image, lang='jpn_vert+chi_tra_vert'))
+    return text_pages
 def process_thumbnails(file_path, document_id):
     """Process the document file to create thumbnails."""
     # Get the file name without extension
