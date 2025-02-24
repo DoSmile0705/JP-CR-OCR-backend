@@ -53,6 +53,7 @@ def OCR_from_file(file_path):
         image = Image.open(file_path)
         text_pages.append(pytesseract.image_to_string(image, lang='jpn_vert+chi_tra_vert'))
     return text_pages
+
 def process_thumbnails(file_path, document_id):
     """Process the document file to create thumbnails."""
     # Get the file name without extension
@@ -71,9 +72,18 @@ def process_thumbnails(file_path, document_id):
             # Create a thumbnail record in the database
             thumbnail = Thumbnail(document_id=document_id, page_number=page_number, image_path=thumbnail_path)
             db.session.add(thumbnail)
-    else:
-        # Handle other file types if necessary
-        pass
+    elif file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.bmp')):
+        # Handle image files
+        from PIL import Image
+        image = Image.open(file_path)
+        thumbnail_path = os.path.join(thumbnail_dir, "1.jpg")
+        # Convert RGBA to RGB before saving as JPEG
+        if image.mode == 'RGBA':
+            image = image.convert('RGB')
+        image.save(thumbnail_path, 'JPEG', quality=10)
+        # Create a thumbnail record in the database
+        thumbnail = Thumbnail(document_id=document_id, page_number=1, image_path=thumbnail_path)
+        db.session.add(thumbnail)
 
     db.session.commit()  # Commit all thumbnail records to the database
 
