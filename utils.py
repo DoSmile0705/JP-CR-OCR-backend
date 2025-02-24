@@ -53,7 +53,6 @@ def OCR_from_file(file_path):
         image = Image.open(file_path)
         text_pages.append(pytesseract.image_to_string(image, lang='jpn_vert+chi_tra_vert'))
     return text_pages
-
 def process_thumbnails(file_path, document_id):
     """Process the document file to create thumbnails."""
     # Get the file name without extension
@@ -92,30 +91,86 @@ def search_by_keyword(keyword):
     search_results = []
     
     for document in documents:
-        pages = []
+        matches = {
+            "title_matches": [],
+            "page_matches": []
+        }
         
-        for page_number, page_text in enumerate(document.text, start=1):
-            seen_positions = set()
-            lines = []
-            
-            for i in range(len(page_text)):
-                if keyword in page_text[i:i+len(keyword)] and i not in seen_positions:
-                    start = max(0, i - 5)
-                    end = min(len(page_text), i + 20)
-                    snippet = page_text[start:end]
+        # Search in document title
+        if keyword.lower() in document.title.lower():
+            matches["title_matches"].append({
+                "text": document.title,
+                "context": document.title
+            })
+        
+        # Search in pages
+        for page in document.pages:
+            page_matches = []
                     
-                    if not any(snippet in existing for existing in lines):
-                        lines.append(snippet)
-                        seen_positions.update(range(i, i + len(keyword)))
+            # Search in page text
+            if page.text and keyword.lower() in page.text.lower():
+                start_idx = page.text.lower().find(keyword.lower())
+                context_start = max(0, start_idx - 50)
+                context_end = min(len(page.text), start_idx + len(keyword) + 50)
+                context = page.text[context_start:context_end]
+                page_matches.append({
+                    "type": "text",
+                    "text": keyword,
+                    "context": f"...{context}..."
+                })
             
-            if lines:
-                pages.append({"page_number": page_number, "lines": lines})
+            # Search in Japanese translation
+            if page.jp_translation and keyword.lower() in page.jp_translation.lower():
+                start_idx = page.jp_translation.lower().find(keyword.lower())
+                context_start = max(0, start_idx - 50)
+                context_end = min(len(page.jp_translation), start_idx + len(keyword) + 50)
+                context = page.jp_translation[context_start:context_end]
+                page_matches.append({
+                    "type": "translation",
+                    "text": keyword,
+                    "context": f"...{context}..."
+                })
+            
+            # Search in annotations
+            for i, annotation in enumerate(page.annotations, 1):
+                # Search in annotation name
+                if annotation.target_text and keyword.lower() in annotation.target_text.lower():
+                    page_matches.append({
+                        "type": "annotation_name",
+                        "text": annotation.target_text,
+                        "context": f"#{i}: {annotation.target_text}"
+                    })
+                
+                # Search in annotation type
+                if annotation.type and keyword.lower() in annotation.type.lower():
+                    page_matches.append({
+                        "type": "annotation_type", 
+                        "text": annotation.type,
+                        "context": f"#{i}: {annotation.type}"
+                    })
+                
+                # Search in annotation content
+                if annotation.content and keyword.lower() in annotation.content.lower():
+                    page_matches.append({
+                        "type": "annotation_content",
+                        "text": keyword,
+                        "context": f"#{i}: {annotation.content}"
+                    })
+            if page_matches:
+                matches["page_matches"].append({
+                    "page_number": page.id,
+                    "matches": page_matches,
+                    "match_count": len(page_matches)
+                })
         
-        if pages:
+        # Add document to results if any matches found
+        if matches["title_matches"] or matches["page_matches"]:
+            total_matches = len(matches["title_matches"]) + sum(page["match_count"] for page in matches["page_matches"])
             search_results.append({
                 "id": document.id,
                 "document_title": document.title,
-                "pages": pages
+                "matches": matches,
+                "total_matches": total_matches
             })
     
     return search_results

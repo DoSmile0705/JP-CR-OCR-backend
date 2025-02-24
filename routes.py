@@ -185,38 +185,58 @@ def edit_document(current_user, doc_id):
     if 'pages' in data:
         for page_data in data['pages']:
             page = Page.query.get(page_data['id'])
-            if page and page.document_id == document.id:
-                if 'text' in page_data:
-                    page.text = page_data['text']
-                if 'jp_translation' in page_data:
-                    page.jp_translation = page_data['jp_translation']
-                
-                # Handle annotations
-                if 'annotations' in page_data:
-                    # Remove existing annotations not in the update
-                    existing_ids = [a['id'] for a in page_data['annotations'] if 'id' in a]
-                    Annotation.query.filter(
-                        Annotation.page_id == page.id,
-                        ~Annotation.id.in_(existing_ids) if existing_ids else True
-                    ).delete(synchronize_session=False)
+            if page:
+                if page.document_id == document.id:
+                    if 'text' in page_data:
+                        page.text = page_data['text']
+                    if 'jp_translation' in page_data:
+                        page.jp_translation = page_data['jp_translation']
                     
-                    # Update or create annotations
+                    # Handle annotations
+                    if 'annotations' in page_data:
+                        # Remove existing annotations not in the update
+                        existing_ids = [a['id'] for a in page_data['annotations'] if 'id' in a]
+                        Annotation.query.filter(
+                            Annotation.page_id == page.id,
+                            ~Annotation.id.in_(existing_ids) if existing_ids else True
+                        ).delete(synchronize_session=False)
+                        
+                        # Update or create annotations
+                        for ann_data in page_data['annotations']:
+                            if 'id' in ann_data:
+                                annotation = Annotation.query.get(ann_data['id'])
+                                if annotation and annotation.page_id == page.id:
+                                    annotation.target_text = ann_data.get('target_text', annotation.target_text)
+                                    annotation.type = ann_data.get('type', annotation.type)
+                                    annotation.content = ann_data.get('content', annotation.content)
+                            else:
+                                annotation = Annotation(
+                                    target_text=ann_data.get('target_text'),
+                                    type=ann_data.get('type'),
+                                    content=ann_data.get('content'),
+                                    page_id=page.id
+                                )
+                                db.session.add(annotation)
+            else:
+                # Create new page if it doesn't exist
+                page = Page(
+                    id=page_data['id'],
+                    text=page_data.get('text'),
+                    jp_translation=page_data.get('jp_translation'),
+                    document_id=document.id
+                )
+                db.session.add(page)
+                
+                # Handle annotations for new page
+                if 'annotations' in page_data:
                     for ann_data in page_data['annotations']:
-                        if 'id' in ann_data:
-                            annotation = Annotation.query.get(ann_data['id'])
-                            if annotation and annotation.page_id == page.id:
-                                annotation.target_text = ann_data.get('target_text', annotation.target_text)
-                                annotation.type = ann_data.get('type', annotation.type)
-                                annotation.content = ann_data.get('content', annotation.content)
-                        else:
-                            annotation = Annotation(
-                                target_text=ann_data.get('target_text'),
-                                type=ann_data.get('type'),
-                                content=ann_data.get('content'),
-                                page_id=page.id
-                            )
-                            db.session.add(annotation)
-    
+                        annotation = Annotation(
+                            target_text=ann_data.get('target_text'),
+                            type=ann_data.get('type'),
+                            content=ann_data.get('content'),
+                            page_id=page_data['id']
+                        )
+                        db.session.add(annotation)
     db.session.commit()
     return jsonify({"message": "Document updated successfully"})
 
@@ -242,7 +262,7 @@ def delete_document(current_user, doc_id):
     
     return jsonify({"message": "Document deleted successfully"})
 
-@main_routes.route('/search-keyword', methods=['GET'])
+@main_routes.route('/search', methods=['GET'])
 def search_documents():
     keyword = request.args.get('keyword')
     # Logic to search documents by keyword
@@ -261,7 +281,7 @@ def get_news():
         'id': item.id,
         'title': item.title,
         'description': item.description,
-        'type': item.type,
+        'isNew': item.type == 'new',
         'date': item.date.isoformat(),
         'created_at': item.created_at.isoformat(),
         'updated_at': item.updated_at.isoformat()
