@@ -168,6 +168,7 @@ def search_by_keyword(keyword):
             total_matches = len(matches["title_matches"]) + sum(page["match_count"] for page in matches["page_matches"])
             search_results.append({
                 "id": document.id,
+                "user_id": document.user_id,
                 "document_title": document.title,
                 "matches": matches,
                 "total_matches": total_matches

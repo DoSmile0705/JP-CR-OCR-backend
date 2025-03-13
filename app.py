@@ -23,6 +23,10 @@ STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stora
 app.config["STORAGE_FOLDER"] = STORAGE_FOLDER
 app.static_folder = STORAGE_FOLDER  # Set the static folder
 
+# app.config["JWT_SECRET_KEY"] = "super-secret"  # Change this!
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = False
+
 
 # Route to serve images from nested folders
 @app.route("/storage/<path:filepath>")
@@ -40,3 +44,4 @@ def get_image(filepath):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
+    # app.run(debug=True)

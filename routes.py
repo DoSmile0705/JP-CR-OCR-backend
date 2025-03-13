@@ -31,7 +31,6 @@ def token_required(f):
 @main_routes.route('/upload', methods=['POST'])
 @token_required
 def upload_file(current_user):
-    # Handle file upload
     file = request.files.get('file')
     file_type = request.form.get('type')
     
@@ -54,12 +53,45 @@ def upload_file(current_user):
         user_id=current_user.id
     )
     db.session.add(document)
-    db.session.commit()
+    db.session.flush()  # Get document.id before commit
+    
+    # Determine number of pages based on file type
+    num_pages = 1  # Default for image files
+    if file.filename.lower().endswith('.pdf'):
+        import PyPDF2
+        with open(file_path, 'rb') as pdf_file:
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            num_pages = len(pdf_reader.pages)
+    
+    # Create pages with sample data
+    for page_num in range(1, num_pages + 1):
+        page = Page(
+            text=f"ページ{page_num}の本文です。内容を追加してください。",
+            jp_translation=f"ページ{page_num}の日本語訳です。内容を追加してください。",
+            document_id=document.id
+        )
+        db.session.add(page)
+        db.session.flush()  # Get page.id before creating annotation
+        
+        # Create default annotation for the page
+        annotation = Annotation(
+            target_text="注釈",
+            type="注釈の種類",
+            content="注釈の内容",
+            page_id=page.id
+        )
+        db.session.add(annotation)
     
     # Process thumbnails
     process_thumbnails(file_path, document.id)
     
-    return jsonify({"status": True, "message": "File uploaded successfully", "document_id": document.id})
+    db.session.commit()
+    
+    return jsonify({
+        "status": True, 
+        "message": "File uploaded successfully", 
+        "document_id": document.id
+    })
 
 @main_routes.route('/register', methods=['POST'])
 def register():
@@ -178,6 +210,7 @@ def edit_document(current_user, doc_id):
     if not document:
         return jsonify({"error": "Document not found"}), 404
     
+    print(document)
     data = request.json
     if 'title' in data:
         document.title = data['title']
@@ -356,3 +389,143 @@ def delete_news(current_user, news_id):
     db.session.commit()
     
     return jsonify({'message': 'News deleted successfully'})
+
+# 管理者用ルート - 全ユーザー取得
+@main_routes.route('/admin/users', methods=['GET'])
+@token_required
+def get_all_users(current_user):
+    # 管理者権限チェック
+    if current_user.role != 'admin':
+        return jsonify({'message': 'Unauthorized access'}), 403
+    
+    users = User.query.all()
+    return jsonify([{
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'role': user.role,
+        'is_active': user.is_active,
+        'created_at': user.created_at.isoformat()
+    } for user in users])
+
+# 管理者用ルート - ユーザー作成
+@main_routes.route('/admin/users', methods=['POST'])
+@token_required
+def admin_create_user(current_user):
+    # 管理者権限チェック
+    if current_user.role != 'admin':
+        return jsonify({'message': 'Unauthorized access'}), 403
+    
+    data = request.json
+    
+    # 必須フィールドの検証
+    if not all(k in data for k in ['username', 'email', 'password', 'confirm_password', 'role']):
+        return jsonify({'message': 'Missing required fields'}), 400
+    
+    # ロールの検証
+    if data['role'] not in ['admin', 'reader', 'researcher']:
+        return jsonify({'message': 'Invalid role'}), 400
+    
+    # パスワード一致チェック
+    if data['password'] != data['confirm_password']:
+        return jsonify({'message': 'Passwords do not match'}), 400
+    
+    # ユーザー存在チェック
+    if User.query.filter_by(email=data['email']).first():
+        return jsonify({'message': 'Email already registered'}), 400
+    
+    if User.query.filter_by(username=data['username']).first():
+        return jsonify({'message': 'Username already taken'}), 400
+    
+    # 新規ユーザー作成
+    user = User(
+        username=data['username'],
+        email=data['email'],
+        role=data['role'],
+        is_active=True  # 管理者が作成したユーザーは自動的に有効化
+    )
+    user.set_password(data['password'])
+    
+    db.session.add(user)
+    db.session.commit()
+    
+    return jsonify({'message': 'User created successfully', 'id': user.id}), 201
+
+# 管理者用ルート - ユーザー更新
+@main_routes.route('/admin/users/<int:user_id>', methods=['PUT'])
+@token_required
+def admin_update_user(current_user, user_id):
+    # 管理者権限チェック
+    if current_user.role != 'admin':
+        return jsonify({'message': 'Unauthorized access'}), 403
+    
+    user = User.query.get_or_404(user_id)
+    data = request.json
+    
+    # ユーザー名更新
+    if 'username' in data and data['username'] != user.username:
+        # 重複チェック
+        if User.query.filter_by(username=data['username']).first():
+            return jsonify({'message': 'Username already taken'}), 400
+        user.username = data['username']
+    
+    # メールアドレス更新
+    if 'email' in data and data['email'] != user.email:
+        # 重複チェック
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({'message': 'Email already registered'}), 400
+        user.email = data['email']
+    
+    # ロール更新
+    if 'role' in data:
+        if data['role'] not in ['admin', 'reader', 'researcher']:
+            return jsonify({'message': 'Invalid role'}), 400
+        user.role = data['role']
+    
+    # アクティブステータス更新
+    if 'is_active' in data:
+        user.is_active = bool(data['is_active'])
+    
+    db.session.commit()
+    return jsonify({'message': 'User updated successfully'})
+
+# 管理者用ルート - ユーザー削除
+@main_routes.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@token_required
+def admin_delete_user(current_user, user_id):
+    # 管理者権限チェック
+    if current_user.role != 'admin':
+        return jsonify({'message': 'Unauthorized access'}), 403
+    
+    user = User.query.get_or_404(user_id)
+    
+    # 自分自身は削除できない
+    if user.id == current_user.id:
+        return jsonify({'message': 'Cannot delete your own account'}), 400
+    
+    db.session.delete(user)
+    db.session.commit()
+    
+    return jsonify({'message': 'User deleted successfully'})
+
+# 管理者用ルート - ユーザーステータス更新
+@main_routes.route('/admin/users/<int:user_id>/status', methods=['PUT'])
+@token_required
+def admin_update_user_status(current_user, user_id):
+    # 管理者権限チェック
+    if current_user.role != 'admin':
+        return jsonify({'message': 'Unauthorized access'}), 403
+    
+    user = User.query.get_or_404(user_id)
+    data = request.json
+    
+    # 自分自身のステータスは変更できない
+    if user.id == current_user.id:
+        return jsonify({'message': 'Cannot change your own status'}), 400
+    
+    if 'is_active' in data:
+        user.is_active = bool(data['is_active'])
+        db.session.commit()
+        return jsonify({'message': 'User status updated successfully'})
+    else:
+        return jsonify({'message': 'Missing is_active field'}), 400
