@@ -43,5 +43,5 @@ def get_image(filepath):
         return abort(404)  # Not Found
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, ssl_context=("cert.pem", "key.pem"), debug=True)
     # app.run(debug=True)
