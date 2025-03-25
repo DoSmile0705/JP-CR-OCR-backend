@@ -24,7 +24,7 @@ class Page(db.Model):
 class Document(db.Model):
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     title = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.Integer, nullable=True)
+    type = db.Column(db.String(20), nullable=True)
     file_path = db.Column(db.String(200), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 

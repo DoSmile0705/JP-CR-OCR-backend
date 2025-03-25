@@ -92,16 +92,16 @@ def search_by_keyword(keyword):
     
     for document in documents:
         matches = {
-            "title_matches": [],
+            # "title_matches": [],
             "page_matches": []
         }
         
         # Search in document title
-        if keyword.lower() in document.title.lower():
-            matches["title_matches"].append({
-                "text": document.title,
-                "context": document.title
-            })
+        # if keyword.lower() in document.title.lower():
+        #     matches["title_matches"].append({
+        #         "text": document.title,
+        #         "context": document.title
+        #     })
         
         # Search in pages
         for page in document.pages:
@@ -138,7 +138,8 @@ def search_by_keyword(keyword):
                     page_matches.append({
                         "type": "annotation_name",
                         "text": annotation.target_text,
-                        "context": f"#{i}: {annotation.target_text}"
+                        "context": f"{annotation.target_text}"
+                        # "context": f"#{i}: {annotation.target_text}"
                     })
                 
                 # Search in annotation type
@@ -146,7 +147,8 @@ def search_by_keyword(keyword):
                     page_matches.append({
                         "type": "annotation_type", 
                         "text": annotation.type,
-                        "context": f"#{i}: {annotation.type}"
+                        "context": f"{annotation.type}"
+                        # "context": f"#{i}: {annotation.type}"
                     })
                 
                 # Search in annotation content
@@ -154,7 +156,8 @@ def search_by_keyword(keyword):
                     page_matches.append({
                         "type": "annotation_content",
                         "text": keyword,
-                        "context": f"#{i}: {annotation.content}"
+                        "context": f"{annotation.content}"
+                        # "context": f"#{i}: {annotation.content}"
                     })
             if page_matches:
                 matches["page_matches"].append({
@@ -164,8 +167,10 @@ def search_by_keyword(keyword):
                 })
         
         # Add document to results if any matches found
-        if matches["title_matches"] or matches["page_matches"]:
-            total_matches = len(matches["title_matches"]) + sum(page["match_count"] for page in matches["page_matches"])
+        # if matches["title_matches"] or matches["page_matches"]:
+        if matches["page_matches"]:
+            # total_matches = len(matches["title_matches"]) + sum(page["match_count"] for page in matches["page_matches"])
+            total_matches = sum(page["match_count"] for page in matches["page_matches"])
             search_results.append({
                 "id": document.id,
                 "user_id": document.user_id,

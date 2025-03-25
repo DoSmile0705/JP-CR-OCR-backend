@@ -54,6 +54,17 @@ def upload_file(current_user):
     )
     db.session.add(document)
     db.session.flush()  # Get document.id before commit
+
+    if file_type is not 'search':
+        # Process thumbnails
+        process_thumbnails(file_path, document.id)
+        
+        db.session.commit()
+        return jsonify({
+            "status": True, 
+            "message": "File uploaded successfully", 
+            "document_id": document.id
+        })
     
     # Determine number of pages based on file type
     num_pages = 1  # Default for image files
@@ -160,7 +171,9 @@ def login():
 @main_routes.route('/doc-list', methods=['GET'])
 # @token_required
 def get_documents():
-    documents = Document.query.all()  # Get all documents instead of filtering by user_id
+    type = request.args.get('type')
+    # documents = Document.query.all()  # Get all documents instead of filtering by user_id
+    documents = Document.query.filter_by(type=type)  # Get all documents instead of filtering by user_id
     return jsonify([{
         "id": doc.id,
         "title": doc.title,
@@ -206,7 +219,10 @@ def get_document(doc_id):
 @main_routes.route('/doc-edit/<int:doc_id>', methods=['PUT'])
 @token_required
 def edit_document(current_user, doc_id):
-    document = Document.query.filter_by(id=doc_id, user_id=current_user.id).first()
+    if current_user.role != 'admin':
+        return jsonify({"error": "Unauthorized"}), 403  # Return 403 Forbidden if not admin
+
+    document = Document.query.filter_by(id=doc_id).first()
     if not document:
         return jsonify({"error": "Document not found"}), 404
     
@@ -320,36 +336,36 @@ def get_news():
         'updated_at': item.updated_at.isoformat()
     } for item in news])
 
-@main_routes.route('/news', methods=['POST'])
-@token_required
-def create_news(current_user):
-    if current_user.role != 'admin':
-        return jsonify({'message': 'Unauthorized access'}), 403
+# @main_routes.route('/news', methods=['POST'])
+# @token_required
+# def create_news(current_user):
+#     if current_user.role != 'admin':
+#         return jsonify({'message': 'Unauthorized access'}), 403
     
-    data = request.json
-    if not all(k in data for k in ['title', 'description', 'type', 'date']):
-        return jsonify({'message': 'Missing required fields'}), 400
+#     data = request.json
+#     if not all(k in data for k in ['title', 'description', 'type', 'date']):
+#         return jsonify({'message': 'Missing required fields'}), 400
     
-    if data['type'] not in ['new', 'old']:
-        return jsonify({'message': 'Invalid news type'}), 400
+#     if data['type'] not in ['new', 'old']:
+#         return jsonify({'message': 'Invalid news type'}), 400
     
-    try:
-        # Parse the date string (expecting format: "YYYY-MM-DD")
-        news_date = datetime.strptime(data['date'], '%Y-%m-%d').date()
-    except ValueError:
-        return jsonify({'message': 'Invalid date format. Use YYYY-MM-DD'}), 400
+#     try:
+#         # Parse the date string (expecting format: "YYYY-MM-DD")
+#         news_date = datetime.strptime(data['date'], '%Y-%m-%d').date()
+#     except ValueError:
+#         return jsonify({'message': 'Invalid date format. Use YYYY-MM-DD'}), 400
     
-    news = News(
-        title=data['title'],
-        description=data['description'],
-        type=data['type'],
-        date=news_date
-    )
+#     news = News(
+#         title=data['title'],
+#         description=data['description'],
+#         type=data['type'],
+#         date=news_date
+#     )
     
-    db.session.add(news)
-    db.session.commit()
+#     db.session.add(news)
+#     db.session.commit()
     
-    return jsonify({'message': 'News created successfully', 'id': news.id}), 201
+#     return jsonify({'message': 'News created successfully', 'id': news.id}), 201
 
 @main_routes.route('/news/<int:news_id>', methods=['PUT'])
 @token_required
@@ -529,3 +545,27 @@ def admin_update_user_status(current_user, user_id):
         return jsonify({'message': 'User status updated successfully'})
     else:
         return jsonify({'message': 'Missing is_active field'}), 400
+    
+@main_routes.route('/news', methods=['POST'])
+def create_news():
+    data = request.json
+
+    # 必須パラメータのチェック
+    if not data.get('title') or not data.get('description') or not data.get('type'):
+        return jsonify({'error': 'タイトル、説明、お知らせの種類は必須です'}), 400
+
+    # `type` のバリデーション ('new' または 'old')
+    if data.get('type') not in ['new', 'old']:
+        return jsonify({'error': 'typeは "new" または "old" のみ許可されています'}), 400
+
+    new_news = News(
+        title=data['title'],
+        description=data['description'],
+        type=data['type'],
+        date=datetime.utcnow()  # 投稿日を現在の日付に設定
+    )
+
+    db.session.add(new_news)
+    db.session.commit()
+
+    return jsonify({'message': 'お知らせを作成しました', 'news_id': new_news.id}), 201
